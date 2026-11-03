@@ -528,12 +528,97 @@ async fn expired_items_are_purged() {
     ca.send(json!({ "type": "tell", "id": "t1", "to": "beta", "text": "go", "hops": 0 }))
         .await;
     ca.expect("accepted").await;
+    let done = ca.expect("done").await;
+    assert_eq!(done["error"], "expired");
+    ca.send(json!({ "type": "ack", "item": done["item"] }))
+        .await;
     tokio::time::sleep(Duration::from_millis(1200)).await;
     let (mut cb, _) = r.auth(&token_b).await;
     cb.expect_quiet(QUIET).await;
     let stats = crew_router::admin::stats(&r.data).unwrap();
     assert!(stats.contains("mailbox items   0"), "{stats}");
     assert!(stats.contains("open tells      0"), "{stats}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn expired_tell_comes_back_to_its_sender() {
+    let r = Router::with(Options {
+        ttl: Duration::from_millis(1000),
+        purge_every: Duration::from_millis(100),
+        ..Options::default()
+    })
+    .await;
+    let (mut ca, _, _) = r.join("alpha").await;
+    let (b, token_b) = r.signup("beta").await;
+    ca.send(json!({ "type": "tell", "id": "t1", "to": "beta", "text": "go", "hops": 0 }))
+        .await;
+    assert_eq!(ca.expect("accepted").await["queued"], true);
+
+    let done = ca.expect("done").await;
+    assert_eq!(done["id"], "t1");
+    assert_eq!(done["from"], b);
+    assert_eq!(done["ok"], false);
+    assert_eq!(done["error"], "expired");
+    assert!(done["item"].is_i64());
+    ca.send(json!({ "type": "ack", "item": done["item"] }))
+        .await;
+
+    // The route is closed, and the recipient never sees the tell.
+    ca.send(json!({ "type": "cancel", "id": "t1" })).await;
+    assert_eq!(ca.expect("error").await["code"], "unknown_id");
+    let (mut cb, _) = r.auth(&token_b).await;
+    cb.expect_quiet(QUIET).await;
+    ca.expect_quiet(QUIET).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn expired_tell_waits_for_an_offline_sender() {
+    let opts = || Options {
+        ttl: Duration::from_millis(2000),
+        purge_every: Duration::from_millis(100),
+        ..Options::default()
+    };
+    let r = Router::with(opts()).await;
+    let (mut ca, a, token_a) = r.join("alpha").await;
+    let (b, token_b) = r.signup("beta").await;
+    ca.send(json!({ "type": "tell", "id": "t1", "to": "beta", "text": "go", "hops": 0 }))
+        .await;
+    ca.expect("accepted").await;
+    ca.close().await;
+
+    // Wait until the tell has turned into a notice in alpha's mailbox.
+    let deadline = tokio::time::Instant::now() + common::WAIT;
+    loop {
+        let conn = crew_router::db::open(&r.data).unwrap();
+        let mine = crew_router::db::mailbox_count(&conn, &a).unwrap();
+        let theirs = crew_router::db::mailbox_count(&conn, &b).unwrap();
+        if mine == 1 && theirs == 0 {
+            break;
+        }
+        assert!(tokio::time::Instant::now() < deadline, "no notice stored");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // It is stored, so it outlives a restart.
+    let data = r.data.clone();
+    let dir = r.stop().await;
+    let r = Router::on(&data, opts()).await;
+
+    let (mut ca, _) = r.auth(&token_a).await;
+    let done = ca.recv().await;
+    assert_eq!(done["type"], "done");
+    assert_eq!(done["id"], "t1");
+    assert_eq!(done["from"], b);
+    assert_eq!(done["ok"], false);
+    assert_eq!(done["error"], "expired");
+    assert!(done["item"].is_i64());
+    ca.send(json!({ "type": "ack", "item": done["item"] }))
+        .await;
+    ca.expect_quiet(QUIET).await;
+
+    let (mut cb, _) = r.auth(&token_b).await;
+    cb.expect_quiet(QUIET).await;
+    drop(dir);
 }
 
 #[tokio::test(flavor = "multi_thread")]

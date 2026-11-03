@@ -408,11 +408,52 @@ pub fn set_team_memory(conn: &Connection, text: &str, by: &str) -> Result<TeamMe
 
 // ------------------------------------------------------------ housekeeping
 
-/// Drops expired mailbox items and tell routes. Returns (items, tasks) removed.
-pub fn purge(conn: &Connection, now: i64) -> Result<(usize, usize)> {
-    let items = conn.execute("DELETE FROM mailbox WHERE expires_at < ?1", [now])?;
-    let tasks = conn.execute("DELETE FROM tasks WHERE expires_at < ?1", [now])?;
-    Ok((items, tasks))
+/// What one purge removed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Purged {
+    pub items: usize,
+    pub tasks: usize,
+    /// Expired tells whose sender got `done{ok:false,error:"expired"}`.
+    pub expired: usize,
+}
+
+/// Drops expired mailbox items and tell routes.
+///
+/// A tell that runs out of time still sitting in its recipient's mailbox goes
+/// back to its sender as `done{ok:false,error:"expired"}` (stored for
+/// `ttl_ms`, like any other item) and its route closes. If the sender's
+/// account is gone, the notice is dropped. Other expired items just go.
+pub fn purge(conn: &mut Connection, now: i64, ttl_ms: i64) -> Result<Purged> {
+    let tx = conn.transaction()?;
+    let stale: Vec<(i64, String, String, String)> = {
+        let mut stmt = tx.prepare(
+            "SELECT m.item, t.recipient, t.id, t.sender FROM tasks t
+             JOIN mailbox m ON m.recipient = t.recipient AND m.task_id = t.id
+                 AND m.sender = t.sender AND m.kind = 'tell'
+             WHERE m.expires_at < ?1 OR t.expires_at < ?1
+             ORDER BY m.item",
+        )?;
+        let rows = stmt.query_map([now], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    let mut out = Purged::default();
+    for (item, recipient, task, sender) in stale {
+        out.items += tx.execute("DELETE FROM mailbox WHERE item = ?1", [item])?;
+        delete_task(&tx, &recipient, &task)?;
+        out.tasks += 1;
+        if account(&tx, &sender)?.is_none() {
+            continue;
+        }
+        let frame = json!({
+            "type": "done", "id": task, "from": recipient, "ok": false, "error": "expired",
+        });
+        insert_item(&tx, &sender, "done", &task, &recipient, &frame, ttl_ms)?;
+        out.expired += 1;
+    }
+    out.items += tx.execute("DELETE FROM mailbox WHERE expires_at < ?1", [now])?;
+    out.tasks += tx.execute("DELETE FROM tasks WHERE expires_at < ?1", [now])?;
+    tx.commit()?;
+    Ok(out)
 }
 
 #[derive(Debug, Clone)]

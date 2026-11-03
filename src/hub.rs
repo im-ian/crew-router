@@ -861,9 +861,15 @@ impl Hub {
     pub fn tick(&self, purge: bool) {
         let mut inner = self.lock();
         if purge {
-            match db::purge(&inner.db, db::now_ms()) {
-                Ok((0, 0)) => {}
-                Ok((items, tasks)) => info!(items, tasks, "purged expired mailbox items"),
+            let ttl = Inner::ttl_ms(&self.cfg);
+            match db::purge(&mut inner.db, db::now_ms(), ttl) {
+                Ok(p) if p == db::Purged::default() => {}
+                Ok(p) => info!(
+                    items = p.items,
+                    tasks = p.tasks,
+                    expired = p.expired,
+                    "purged expired mailbox items"
+                ),
                 Err(e) => warn!(error = %e, "purge failed"),
             }
         }
