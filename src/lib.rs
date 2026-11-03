@@ -6,3 +6,4 @@
 pub mod db;
 pub mod hub;
 pub mod ids;
+pub mod server;
