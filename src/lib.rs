@@ -4,4 +4,5 @@
 //! ("와이어 프로토콜 v1").
 
 pub mod db;
+pub mod hub;
 pub mod ids;
