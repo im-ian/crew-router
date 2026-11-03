@@ -35,20 +35,20 @@
 <circle cx="158.0" cy="462" r="5" fill="#febc2e" fill-opacity="0.9"/>
 <circle cx="174.0" cy="462" r="5" fill="#28c840" fill-opacity="0.9"/>
 <g transform="translate(146.0 490) scale(1.1875)"><circle cx="32" cy="32" r="30" fill="#ff5a5a"/><rect x="21.8" y="25.75" width="6" height="10.5" rx="3" fill="#fff"/><rect x="36.2" y="25.75" width="6" height="10.5" rx="3" fill="#fff"/></g>
-<text x="242.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">민지</text>
+<text x="242.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">Mina</text>
 <text x="242.0" y="558" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="17" font-weight="500" fill="#f4f4f8" fill-opacity="0.6">MacBook Pro</text>
 <g filter="url(#shadow)"><rect x="510.0" y="440" width="260" height="150" rx="20" fill="#232a47" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/></g>
 <circle cx="532.0" cy="462" r="5" fill="#ff5f57" fill-opacity="0.9"/>
 <circle cx="548.0" cy="462" r="5" fill="#febc2e" fill-opacity="0.9"/>
 <circle cx="564.0" cy="462" r="5" fill="#28c840" fill-opacity="0.9"/>
 <g transform="translate(536.0 490) scale(1.1875)"><path fill="#14c38e" d="M26.93 8.02Q32 -1.76 37.07 8.02L59.41 51.09Q64.48 60.87 53.46 60.87L10.54 60.87Q-0.48 60.87 4.59 51.09Z"/><rect x="21.8" y="30.75" width="6" height="10.5" rx="3" fill="#fff"/><rect x="36.2" y="30.75" width="6" height="10.5" rx="3" fill="#fff"/></g>
-<text x="632.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">준호</text>
+<text x="632.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">Jay</text>
 <text x="632.0" y="558" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="17" font-weight="500" fill="#f4f4f8" fill-opacity="0.6">Linux 데스크톱</text>
 <g filter="url(#shadow)"><rect x="900.0" y="440" width="260" height="150" rx="20" fill="#232a47" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/></g>
 <circle cx="922.0" cy="462" r="5" fill="#ff5f57" fill-opacity="0.9"/>
 <circle cx="938.0" cy="462" r="5" fill="#febc2e" fill-opacity="0.9"/>
 <circle cx="954.0" cy="462" r="5" fill="#28c840" fill-opacity="0.9"/>
 <g transform="translate(926.0 490) scale(1.1875)"><rect x="3" y="3" width="58" height="58" rx="21" fill="#9b7dff"/><rect x="21.8" y="25.75" width="6" height="10.5" rx="3" fill="#fff"/><rect x="36.2" y="25.75" width="6" height="10.5" rx="3" fill="#fff"/></g>
-<text x="1022.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">서연</text>
+<text x="1022.0" y="528" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.6" fill="#f4f4f8">Sunny</text>
 <text x="1022.0" y="558" font-family="Pretendard, 'Apple SD Gothic Neo', 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="17" font-weight="500" fill="#f4f4f8" fill-opacity="0.6">Mac mini</text>
 </svg>
