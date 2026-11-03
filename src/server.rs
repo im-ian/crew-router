@@ -31,18 +31,24 @@ pub struct ServeConfig {
     pub tls: Option<(PathBuf, PathBuf)>,
     /// How often to look for admin changes and new mailbox items.
     pub tick: Duration,
-    /// How often to drop expired rows.
+    /// How often to drop expired rows. Checked once per tick.
     pub purge_every: Duration,
 }
 
 impl ServeConfig {
+    /// Defaults: tick every 5s, purge every 60s. A short TTL purges at least
+    /// twice per TTL (never more than once a second) and ticks that often too.
     pub fn new(data_dir: PathBuf, hub: HubConfig) -> Self {
+        let purge_every = Duration::from_secs(60)
+            .min(hub.ttl / 2)
+            .max(Duration::from_secs(1));
+        let tick = Duration::from_secs(5).min(purge_every);
         ServeConfig {
             data_dir,
             hub,
             tls: None,
-            tick: Duration::from_secs(5),
-            purge_every: Duration::from_secs(60),
+            tick,
+            purge_every,
         }
     }
 }
@@ -161,13 +167,15 @@ pub async fn run(
         let tick = cfg.tick;
         let purge_every = cfg.purge_every;
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tick);
             let mut last_purge = tokio::time::Instant::now();
+            let mut interval = tokio::time::interval(tick);
             loop {
-                interval.tick().await;
-                let purge = last_purge.elapsed() >= purge_every;
+                // Measure from the scheduled tick, so purge_every == tick
+                // purges on every tick instead of every other one.
+                let now = interval.tick().await;
+                let purge = now.duration_since(last_purge) >= purge_every;
                 if purge {
-                    last_purge = tokio::time::Instant::now();
+                    last_purge = now;
                 }
                 let hub = hub.clone();
                 let _ = tokio::task::spawn_blocking(move || hub.tick(purge)).await;

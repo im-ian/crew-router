@@ -621,6 +621,72 @@ async fn expired_tell_waits_for_an_offline_sender() {
     drop(dir);
 }
 
+/// Kills the child router when a test ends, pass or fail.
+struct Child(std::process::Child);
+
+impl Drop for Child {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ttl_secs_flag_expires_tells_in_seconds() {
+    let bin = env!("CARGO_BIN_EXE_crew-router");
+    let help = std::process::Command::new(bin)
+        .args(["serve", "--help"])
+        .output()
+        .unwrap();
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("--ttl-days"), "{help}");
+    assert!(!help.contains("ttl-secs"), "the flag is hidden: {help}");
+
+    let dir = tempfile::tempdir().unwrap();
+    let addr = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let _child = Child(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(dir.path())
+            .args(["serve", "--listen", &addr.to_string(), "--ttl-secs", "1"])
+            .env("CREW_ROUTER_LOG", "error")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let url = format!("ws://{addr}/ws");
+    let deadline = tokio::time::Instant::now() + common::WAIT;
+    let connect = || async {
+        loop {
+            match tokio_tungstenite::connect_async(&url).await {
+                Ok((ws, _)) => return common::Client { ws },
+                Err(e) => assert!(tokio::time::Instant::now() < deadline, "{e}"),
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    };
+
+    let mut c = connect().await;
+    c.send(json!({ "type": "signup", "name": "beta" })).await;
+    let b = c.expect("signed_up").await["account"].clone();
+    c.send(json!({ "type": "signup", "name": "alpha" })).await;
+    let token = c.expect("signed_up").await["token"].clone();
+    let mut ca = connect().await;
+    ca.send(json!({ "type": "auth", "token": token })).await;
+    ca.expect("welcome").await;
+    ca.send(json!({ "type": "tell", "id": "t1", "to": "beta", "text": "go", "hops": 0 }))
+        .await;
+    assert_eq!(ca.expect("accepted").await["queued"], true);
+    let done = ca.expect("done").await;
+    assert_eq!(done["id"], "t1");
+    assert_eq!(done["from"], b);
+    assert_eq!(done["error"], "expired");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn bad_frames_get_errors() {
     let r = Router::start().await;

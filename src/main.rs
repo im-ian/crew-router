@@ -84,6 +84,10 @@ struct ServeArgs {
     #[arg(long, env = "CREW_ROUTER_TTL_DAYS", default_value_t = 30)]
     ttl_days: u32,
 
+    /// Seconds to keep undelivered messages. Overrides --ttl-days. For tests.
+    #[arg(long, env = "CREW_ROUTER_TTL_SECS", hide = true)]
+    ttl_secs: Option<u64>,
+
     /// PEM certificate chain. With --tls-key, serves wss/https.
     #[arg(long, env = "CREW_ROUTER_TLS_CERT", requires = "tls_key")]
     tls_cert: Option<PathBuf>,
@@ -116,14 +120,17 @@ async fn serve(data: PathBuf, args: ServeArgs) -> Result<()> {
     if signup == SignupMode::Invite && invite_code.is_none() {
         bail!("--signup invite needs --invite-code (or CREW_ROUTER_INVITE_CODE)");
     }
-    if args.ttl_days == 0 {
-        bail!("--ttl-days must be at least 1");
-    }
+    let ttl = match args.ttl_secs {
+        Some(0) => bail!("--ttl-secs must be at least 1"),
+        Some(secs) => Duration::from_secs(secs),
+        None if args.ttl_days == 0 => bail!("--ttl-days must be at least 1"),
+        None => days(args.ttl_days),
+    };
     let hub = HubConfig {
         title: args.title.unwrap_or_else(default_title),
         signup,
         invite_code,
-        ttl: days(args.ttl_days),
+        ttl,
     };
     let mut cfg = ServeConfig::new(data, hub);
     cfg.tls = args.tls_cert.zip(args.tls_key);
@@ -135,6 +142,12 @@ async fn serve(data: PathBuf, args: ServeArgs) -> Result<()> {
         data = %cfg.data_dir.display(),
         "starting crew-router"
     );
+    if let Some(secs) = args.ttl_secs {
+        tracing::warn!(
+            ttl_secs = secs,
+            "mailbox TTL set in seconds; --ttl-days is ignored"
+        );
+    }
     let listener = std::net::TcpListener::bind(args.listen)
         .with_context(|| format!("cannot listen on {}", args.listen))?;
     server::run(listener, cfg, shutdown_signal()).await
