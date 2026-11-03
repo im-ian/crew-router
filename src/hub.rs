@@ -432,6 +432,14 @@ impl Hub {
         let id = frame.get("id").and_then(Value::as_str).map(str::to_string);
         debug!(conn = s.conn, kind = %kind, "frame");
 
+        // A connection that was replaced or kicked may still get a frame in
+        // before its close goes out; it no longer speaks for the account.
+        if let Some(me) = &s.account {
+            if !self.lock().online.get(me).is_some_and(|l| l.conn == s.conn) {
+                s.account = None;
+            }
+        }
+
         let mut keep = true;
         let result = match (kind.as_str(), s.account.clone()) {
             ("ping", _) => {
