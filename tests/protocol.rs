@@ -448,6 +448,57 @@ async fn files_over_25mb_are_refused() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_member_renames_itself() {
+    let r = Router::start().await;
+    let (mut ca, _, _) = r.join("alpha").await;
+    let (mut cb, b, token) = r.join("beta").await;
+
+    cb.send(json!({ "type": "rename", "id": "r1", "name": "ALPHA" }))
+        .await;
+    let e = cb.expect("error").await;
+    assert_eq!(
+        (e["code"].as_str(), e["id"].as_str()),
+        (Some("name_taken"), Some("r1"))
+    );
+    cb.send(json!({ "type": "rename", "id": "r2", "name": "a b" }))
+        .await;
+    assert_eq!(cb.expect("error").await["code"], "bad_name");
+
+    // Mail waiting under the old name follows the account.
+    cb.close().await;
+    ca.send(json!({ "type": "tell", "id": "t1", "to": "beta", "text": "go", "hops": 0 }))
+        .await;
+    assert_eq!(ca.expect("accepted").await["queued"], true);
+    let (mut cb, _) = r.auth(&token).await;
+    cb.expect("tell").await;
+    cb.send(json!({ "type": "rename", "id": "r3", "name": "Gamma" }))
+        .await;
+    let ok = cb.expect("renamed").await;
+    assert_eq!(
+        (ok["id"].as_str(), ok["name"].as_str()),
+        (Some("r3"), Some("Gamma"))
+    );
+    loop {
+        let m = ca.expect("member").await;
+        assert_eq!(m["member"]["account"], b);
+        if m["member"]["name"] == "Gamma" {
+            break;
+        }
+    }
+
+    // Only case changes: still its own name.
+    cb.send(json!({ "type": "rename", "id": "r4", "name": "gamma" }))
+        .await;
+    cb.expect("renamed").await;
+    ca.send(json!({ "type": "tell", "id": "t2", "to": "beta", "text": "x", "hops": 0 }))
+        .await;
+    assert_eq!(ca.expect("error").await["code"], "no_such_member");
+    let mut cc = r.connect().await;
+    cc.send(json!({ "type": "signup", "name": "beta" })).await;
+    assert_eq!(cc.expect("signed_up").await["name"], "beta");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn invite_and_closed_signup() {
     let r = Router::with(Options {
         signup: SignupMode::Invite,

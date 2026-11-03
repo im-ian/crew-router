@@ -152,6 +152,13 @@ struct AuthIn {
 }
 
 #[derive(Deserialize)]
+struct RenameIn {
+    #[serde(default)]
+    id: Option<String>,
+    name: String,
+}
+
+#[derive(Deserialize)]
 struct PresenceIn {
     status: String,
 }
@@ -454,6 +461,7 @@ impl Hub {
             ("auth", None) => self.auth(s, frame),
             ("auth", Some(_)) => Err(reject("bad_frame", "this connection is signed in")),
             ("profile", Some(me)) => self.profile(&me, frame),
+            ("rename", Some(me)) => self.rename(s, &me, frame),
             ("presence", Some(me)) => self.presence(&me, frame),
             ("tell", Some(me)) => self.tell(s, &me, frame),
             ("progress", Some(me)) => self.progress(&me, frame),
@@ -468,8 +476,8 @@ impl Hub {
                 self.leave(s, &me)
             }
             (
-                "profile" | "presence" | "tell" | "progress" | "reply" | "done" | "cancel" | "ack"
-                | "team_memory_append" | "team_memory_set" | "leave",
+                "profile" | "rename" | "presence" | "tell" | "progress" | "reply" | "done"
+                | "cancel" | "ack" | "team_memory_append" | "team_memory_set" | "leave",
                 None,
             ) => Err(reject("unauthorized", "send auth first")),
             _ => Err(reject("bad_frame", "unknown frame type")),
@@ -614,6 +622,34 @@ impl Hub {
         merge_profile(&mut account.profile, &patch)?;
         db::set_profile(&inner.db, me, &account.profile)?;
         inner.announce(me);
+        Ok(())
+    }
+
+    /// The member takes a new name, under the same rules as signup. Mail
+    /// follows the account, so nothing waiting for it is lost.
+    fn rename(&self, s: &Session, me: &str, frame: Value) -> Handled {
+        let req: RenameIn = parse(frame)?;
+        if !ids::valid_name(&req.name) {
+            return Err(reject(
+                "bad_name",
+                "a name is 1–32 letters, digits, `-` or `_`",
+            ));
+        }
+        let mut inner = self.lock();
+        let key = ids::name_key(&req.name);
+        if let Some(other) = db::account_by_name_key(&inner.db, &key)? {
+            if other.id != me {
+                return Err(reject("name_taken", "that name is taken"));
+            }
+        }
+        db::rename(&inner.db, me, &req.name, &key)?;
+        inner.roster.insert(me.to_string(), req.name.clone());
+        inner.announce(me);
+        info!(account = %me, name = %req.name, "renamed");
+        send(
+            &s.tx,
+            json!({ "type": "renamed", "id": req.id, "name": req.name }),
+        );
         Ok(())
     }
 
